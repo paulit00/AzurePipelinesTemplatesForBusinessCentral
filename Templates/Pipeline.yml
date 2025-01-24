@@ -318,6 +318,7 @@ stages:
           installTestFramework        = $true
           installTestLibraries        = $true
           azureDevOps                 = $true
+          doNotPublishApps            = $true
           NewBCContainer              = $NewBCContainer
           SignBcContainerApp          = $SignBcContainerApp
         }
