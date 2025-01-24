@@ -377,7 +377,9 @@ stages:
           if ([System.IO.Directory]::Exists($TempPath)) {
               throw "TempPath ($TempPath) already exist"
           }
+          $TempPath = $TempPath -replace '"', ''
           Write-Host $TempPath
+
           [System.IO.Directory]::CreateDirectory($TempPath)
           Copy-Item -Path * -Exclude .git -Destination $TempPath -Recurse -Force -ErrorAction SilentlyContinue
           $OldPath = "$CommonPath-Old"
