@@ -378,11 +378,12 @@ stages:
               throw "TempPath ($TempPath) already exist"
           }
           $TempPath = $TempPath -replace '"', ''
-          Write-Host $TempPath
+          Write-Host $TempPath + " TempPath"
 
           [System.IO.Directory]::CreateDirectory($TempPath)
           Copy-Item -Path * -Exclude .git -Destination $TempPath -Recurse -Force -ErrorAction SilentlyContinue
           $OldPath = "$CommonPath-Old"
+          Write-Host $OldPath + " OldPath"
           if ([System.IO.Directory]::Exists($OldPath)) {
               [System.IO.Directory]::Delete($OldPath, $true)
           }
@@ -397,6 +398,7 @@ stages:
               [System.IO.Directory]::Delete($TempPath, $true)
           }
           
+          Write-Host $TempPath + "2"
         
           $TempPaths = "$FileStoragePath-Temporary-$env:Build_BuildID"
           if ([System.IO.Directory]::Exists($TempPaths)) {
