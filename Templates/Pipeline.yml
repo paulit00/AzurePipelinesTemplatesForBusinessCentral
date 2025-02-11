@@ -425,6 +425,106 @@ stages:
         env:
           MainAppFolder: ${{ parameters.mainAppFolder }}
         displayName: Copy files to BCApps
+    - ${{ if parameters.publishPartners }}:
+      - powershell: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          $SourceFolder = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion\.output",
+          $DestinationRoot = "\\filestorage\Projects\DevOps\dynamics-partners-lt"
+
+          function Get-BasePrefix {
+              param([string]$Name)
+              $idx = $Name.LastIndexOf('_')
+              if ($idx -gt 0) {
+                  return $Name.Substring(0, $idx)
+              } else {
+                  return $Name
+              }
+          }
+
+          $appFiles = Get-ChildItem -Path $SourceFolder -Filter *.app -File
+          if (-not $appFiles) {
+              Write-Host "No .app files found in $SourceFolder"
+              return
+          }
+
+          foreach ($app in $appFiles) {
+              Write-Host "Processing file: $($app.FullName)" -ForegroundColor Cyan
+              try {
+                  Write-Host "Extracting NavxManifest.xml from $($app.Name) using 7-Zip..."
+                  $xmlContent = & "C:\Program Files\7-Zip\7z.exe" e -so $app.FullName "NavxManifest.xml"
+                  if (-not $xmlContent) {
+                      Write-Warning "NavxManifest.xml not found in $($app.Name). Skipping."
+                      continue
+                  }
+                  [xml]$xmlManifest = $xmlContent
+
+                  $nsMgr = New-Object System.Xml.XmlNamespaceManager($xmlManifest.NameTable)
+                  $nsMgr.AddNamespace("nav", "http://schemas.microsoft.com/navx/2015/manifest")
+
+                  $appNode = $xmlManifest.SelectSingleNode("//nav:App", $nsMgr)
+                  if (-not $appNode) {
+                      Write-Warning "No <App> element found in manifest for $($app.Name). Skipping."
+                      continue
+                  }
+
+                  $appVersion = $appNode.GetAttribute("Application")
+                  if (-not $appVersion) {
+                      Write-Warning "Application attribute not found in manifest for $($app.Name). Skipping."
+                      continue
+                  }
+
+                  $versionParts = $appVersion.Split('.')
+                  $majorVersion = $versionParts[0]
+                  Write-Host "Determined major version: $majorVersion from Application version $appVersion" -ForegroundColor Yellow
+
+                  $currentBasePrefix = Get-BasePrefix $app.BaseName
+                  Write-Host "Base prefix extracted from file name: '$currentBasePrefix'" -ForegroundColor Yellow
+
+                  $candidateFiles = dir -Path $DestinationRoot -Filter *.app -Depth 3 -Recurse | Where-Object {
+                      $candidatePrefix = Get-BasePrefix $_.BaseName
+                      $candidatePrefix.ToLower() -eq $currentBasePrefix.ToLower()
+                  }
+
+                  $destinationDir = $null
+                  if ($candidateFiles.Count -gt 0) {
+                      $candidateFile = $candidateFiles[0]
+                      $candidateDir = $candidateFile.DirectoryName
+                      $parentFolder = Split-Path $candidateDir -Parent
+                      $destinationDir = Join-Path -Path $parentFolder -ChildPath "Latest-BC$majorVersion"
+                      Write-Host "Found candidate file: $($candidateFile.FullName)" -ForegroundColor Cyan
+                  }
+                  else {
+                      $destinationDir = Join-Path -Path $DestinationRoot -ChildPath "Latest-BC$majorVersion"
+                      Write-Host "No candidate file found; using default parent: $DestinationRoot" -ForegroundColor Cyan
+                  }
+
+                  if (-not (Test-Path $destinationDir)) {
+                      Write-Host "Creating folder: $destinationDir" -ForegroundColor Magenta
+                      New-Item -ItemType Directory -Path $destinationDir | Out-Null
+                  }
+
+                  $destFile = Join-Path -Path $destinationDir -ChildPath $app.Name
+
+                  Write-Host "Destination path: $destFile" -ForegroundColor Green
+                  if (Test-Path $destFile) {
+                      Write-Host "File already exists" -ForegroundColor Cyan
+                  } else {
+                      $oldFiles = Get-ChildItem -Path $destinationDir -Filter *.app | Where-Object { (Get-BasePrefix $_.BaseName).ToLower() -eq $currentBasePrefix.ToLower() }
+                      foreach ($oldFile in $oldFiles) {
+                          Write-Host "Removing old file:"
+                          Write-Host $oldFile.FullName
+                          Remove-Item $oldFile.FullName -Force
+                      }
+                      Copy-Item -Path $app.FullName -Destination $destFile
+                  }
+              }
+              catch {
+                  Write-Error "Error processing file $($app.FullName): $_"
+              }
+          }
+        displayName: Copy files to dynamics-partners-lt
     - ${{ if ne(parameters.latestFolder, '') }}:
       - powershell: |
           Set-StrictMode -Version Latest
