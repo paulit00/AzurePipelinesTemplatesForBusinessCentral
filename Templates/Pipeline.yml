@@ -494,7 +494,7 @@ stages:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          $SourceFolder = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion\.output",
+          $SourceFolder = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion\.output"
           $DestinationRoot = "\\filestorage\Projects\DevOps\dynamics-partners-lt"
 
           function Get-BasePrefix {
