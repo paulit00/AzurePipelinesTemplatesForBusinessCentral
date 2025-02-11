@@ -50,6 +50,8 @@ parameters:
 
 - name: publishOutput
   type: boolean
+- name: publishPartners
+  type: boolean
   default: true
 - name: latestFolder
   type: string
