@@ -363,66 +363,70 @@ stages:
                 $env:System_PullRequest_TargetBranch -replace 'refs/heads/', ''
             }
           )
-              
-          if($env:Build_SourceBranchName.Contains('Release') -Or $env:Build_SourceBranch -match 'release')
-          {
-            $CommonPath = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
-            $FileStoragePath = "\\filestorage\Projects\DevOps\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
-          }
-          else
-          {
-            $CommonPath = "C:\AzureDevOps\!Prereleases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
-            $FileStoragePath = "\\filestorage\Projects\DevOps\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
-          }
-          
-          $TempPath = "$CommonPath-Temporary-$env:Build_BuildID"
-          if ([System.IO.Directory]::Exists($TempPath)) {
-              throw "TempPath ($TempPath) already exist"
-          }
-          $TempPath = $TempPath -replace '"', ''
-          Write-Host $TempPath + " TempPath"
 
-          [System.IO.Directory]::CreateDirectory($TempPath)
-          Copy-Item -Path * -Exclude .git -Destination $TempPath -Recurse -Force -ErrorAction SilentlyContinue
-          $OldPath = "$CommonPath-Old"
-          Write-Host $OldPath + " OldPath"
-          if ([System.IO.Directory]::Exists($OldPath)) {
-              [System.IO.Directory]::Delete($OldPath, $true)
+          $ReleaseCommonPath = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
+          $ReleaseFileStoragePath = "\\filestorage\Projects\DevOps\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
+
+          $PrereleaseCommonPath = "C:\AzureDevOps\!Prereleases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
+          $PrereleaseFileStoragePath = "\\filestorage\Projects\DevOps\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:AppReleaseVersion\$BranchName-$env:BcApplicationVersion"
+
+          function Copy-BuildOutput {
+              param($CommonPath, $FileStoragePath)
+
+              $TempPath = "$CommonPath-Temporary-$env:Build_BuildID"
+              if ([System.IO.Directory]::Exists($TempPath)) {
+                  throw "TempPath ($TempPath) already exist"
+              }
+              $TempPath = $TempPath -replace '"', ''
+              Write-Host "$TempPath TempPath"
+
+              [System.IO.Directory]::CreateDirectory($TempPath)
+              Copy-Item -Path * -Exclude .git -Destination $TempPath -Recurse -Force -ErrorAction SilentlyContinue
+
+              $OldPath = "$CommonPath-Old"
+              Write-Host "$OldPath OldPath"
+              if ([System.IO.Directory]::Exists($OldPath)) {
+                  [System.IO.Directory]::Delete($OldPath, $true)
+              }
+
+              if ([System.IO.Directory]::Exists($CommonPath)) {
+                  [System.IO.Directory]::CreateDirectory($CommonPath)
+                  Copy-Item -Path $CommonPath\* -Destination $OldPath -Recurse -Force -ErrorAction SilentlyContinue
+                  [System.IO.Directory]::Delete($CommonPath, $true)
+              }
+
+              if (-not ([System.IO.Directory]::Exists($CommonPath))) {
+                  Copy-Item -Path $TempPath -Destination $CommonPath -Recurse -Force -ErrorAction SilentlyContinue
+                  [System.IO.Directory]::Delete($TempPath, $true)
+              }
+
+              # File storage copy
+              $TempPaths = "$FileStoragePath-Temporary-$env:Build_BuildID"
+              if ([System.IO.Directory]::Exists($TempPaths)) {
+                  [System.IO.Directory]::Delete($TempPaths, $true)
+              }
+              [System.IO.Directory]::CreateDirectory($TempPaths)
+              Copy-Item -Path * -Exclude .git -Destination $TempPaths -Recurse -Force -ErrorAction SilentlyContinue
+
+              $OldPaths = "$CommonPath-Old"
+              if ([System.IO.Directory]::Exists($OldPaths)) {
+                  [System.IO.Directory]::Delete($OldPaths, $true)
+              }
+
+              if ([System.IO.Directory]::Exists($FileStoragePath)) {
+                  [System.IO.Directory]::CreateDirectory($FileStoragePath)
+                  Copy-Item -Path $FileStoragePath\* -Destination $OldPaths -Recurse -Force -ErrorAction SilentlyContinue
+                  [System.IO.Directory]::Delete($FileStoragePath, $true)
+              }
+
+              if (-not ([System.IO.Directory]::Exists($FileStoragePath))) {
+                  Copy-Item -Path $TempPaths -Destination $FileStoragePath -Recurse -Force -ErrorAction SilentlyContinue
+                  [System.IO.Directory]::Delete($TempPaths, $true)
+              }
           }
-          $Path = $CommonPath
-          if ([System.IO.Directory]::Exists($Path)) {
-              [System.IO.Directory]::CreateDirectory($Path)
-              Copy-Item -Path $Path\* -Destination $OldPath -Recurse -Force -ErrorAction SilentlyContinue
-              [System.IO.Directory]::Delete($Path, $true)
-          }
-          if (-not ([System.IO.Directory]::Exists($Path))) {
-              Copy-Item -Path $TempPath -Destination $Path -Recurse -Force -ErrorAction SilentlyContinue
-              [System.IO.Directory]::Delete($TempPath, $true)
-          }
-          
-          Write-Host $TempPath + "2"
-        
-          $TempPaths = "$FileStoragePath-Temporary-$env:Build_BuildID"
-          if ([System.IO.Directory]::Exists($TempPaths)) {
-               [System.IO.Directory]::Delete($TempPaths, $true)
-          }
-          [System.IO.Directory]::CreateDirectory($TempPaths)
-          Copy-Item -Path * -Exclude .git -Destination $TempPaths -Recurse -Force -ErrorAction SilentlyContinue
-          $OldPaths = "$CommonPath-Old"
-          if ([System.IO.Directory]::Exists($OldPaths)) {
-              [System.IO.Directory]::Delete($OldPaths, $true)
-          }        
-          $Paths = $FileStoragePath
-          if ([System.IO.Directory]::Exists($Paths)) {
-              [System.IO.Directory]::CreateDirectory($Paths)
-              Copy-Item -Path $Paths\* -Destination $OldPath -Recurse -Force -ErrorAction SilentlyContinue
-              [System.IO.Directory]::Delete($Paths, $true)
-          }
-          if (-not ([System.IO.Directory]::Exists($Paths))) {
-              Copy-Item -Path $TempPaths -Destination $Paths -Recurse -Force -ErrorAction SilentlyContinue
-              [System.IO.Directory]::Delete($TempPaths, $true)
-          }
-        
+
+          Copy-BuildOutput -CommonPath $ReleaseCommonPath -FileStoragePath $ReleaseFileStoragePath
+          Copy-BuildOutput -CommonPath $PrereleaseCommonPath -FileStoragePath $PrereleaseFileStoragePath
           
         env:
           MainAppFolder: ${{ parameters.mainAppFolder }}
@@ -430,62 +434,54 @@ stages:
     - ${{ if ne(parameters.latestFolder, '') }}:
       - powershell: |
           Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
 
           $NamePath = 'Latest-' + $env:Build_SourceBranchName.ToUpper()
-          if($NamePath.Contains('RELEASE')){
-          $NamePath = $NamePath -replace 'RELEASE-',''
-          }
-           
-          $NameFile =  Get-Item -Path '.output/*' -Exclude .git -ErrorAction SilentlyContinue
-          $outputFile = Split-Path $NameFile -leaf
-          
-          
-          $Outputfilepath = @()
-          if($env:Build_SourceBranchName.Contains('Release') -Or $env:Build_SourceBranch -match 'release')
-          {
-          $Path = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:LatestFolder"
-          $FileStoragePath = "\\filestorage\Projects\DevOps\!Releases\$NamePath"
-          foreach ($i in $outputFile)
-          {
-          $i = $i -replace ".{12}$"
-          $Outputfilepath += "\\filestorage\Projects\DevOps\!Releases\$NamePath\$i"
-          }
-          }
-          
-          else{
-          $Path = "C:\AzureDevOps\!Prereleases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:LatestFolder"
-          $FileStoragePath = "\\filestorage\Projects\DevOps\!Prereleases\$NamePath"
-          foreach ($i in $outputFile)
-          {
-          $i = $i -replace ".{12}$"
-          $Outputfilepath += "\\filestorage\Projects\DevOps\!Prereleases\$NamePath\$i"
-          }
-          }
-          
-          if (-not ([System.IO.Directory]::Exists($FileStoragePath))) {
-              [System.IO.Directory]::CreateDirectory($FileStoragePath)
-          }
-                       
-          foreach ($o2 in $Outputfilepath){
-          if (Test-Path -Path "$o2*") {
-          Write-Host "File Exists" -ForegroundColor red -BackgroundColor white
-          (Get-ChildItem -Path "$o2*").Delete()
-          } 
+          if ($NamePath.Contains('RELEASE')) {
+              $NamePath = $NamePath -replace 'RELEASE-',''
           }
 
-          if ([System.IO.Directory]::Exists($Path)) {
-              [System.IO.Directory]::Delete($Path, $true)
+          $NameFile = Get-Item -Path '.output/*' -Exclude .git -ErrorAction SilentlyContinue
+          $outputFile = Split-Path $NameFile -leaf
+
+          $OutputFilePaths = @()
+          foreach ($i in $outputFile) {
+              $i = $i -replace ".{12}$"
+              $OutputFilePaths += $i
           }
-          if (-not ([System.IO.Directory]::Exists($Path))) {
-              [System.IO.Directory]::CreateDirectory($Path)
+
+          function Copy-LatestOutput {
+              param($Path, $FileStoragePath, $OutputFilePaths)
+
+              if (-not (Test-Path $FileStoragePath)) {
+                  [System.IO.Directory]::CreateDirectory($FileStoragePath) | Out-Null
+              }
+
+              foreach ($o2 in $OutputFilePaths) {
+                  $CheckPath = "$o2*"
+                  if (Test-Path -Path (Join-Path $FileStoragePath $CheckPath)) {
+                      Write-Host "File Exists" -ForegroundColor red -BackgroundColor white
+                      (Get-ChildItem -Path (Join-Path $FileStoragePath $CheckPath)).Delete()
+                  }
+              }
+
+              if (Test-Path $Path) {
+                  Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
+              }
+              [System.IO.Directory]::CreateDirectory($Path) | Out-Null
               Copy-Item -Path * -Exclude .git -Destination $Path -Recurse -Force -ErrorAction SilentlyContinue
-          }
-              
-          if ([System.IO.Directory]::Exists($FileStoragePath)) {
+
               Copy-Item -Path '.output/*' -Exclude .git -Destination $FileStoragePath -Recurse -Force -ErrorAction SilentlyContinue
           }
 
-         
+          $ReleasePath = "C:\AzureDevOps\!Releases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:LatestFolder"
+          $ReleaseFileStoragePath = "\\filestorage\Projects\DevOps\!Releases\$NamePath"
+          Copy-LatestOutput -Path $ReleasePath -FileStoragePath $ReleaseFileStoragePath -OutputFilePaths $OutputFilePaths
+
+          $PrereleasePath = "C:\AzureDevOps\!Prereleases\$env:OrganizationName\$env:System_TeamProject\$env:Build_Repository_Name\$env:LatestFolder"
+          $PrereleaseFileStoragePath = "\\filestorage\Projects\DevOps\!Prereleases\$NamePath"
+          Copy-LatestOutput -Path $PrereleasePath -FileStoragePath $PrereleaseFileStoragePath -OutputFilePaths $OutputFilePaths
+              
         env:
           LatestFolder: ${{ parameters.latestFolder }}
         displayName: Copy files to Latest folder
