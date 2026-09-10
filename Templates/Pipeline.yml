@@ -37,6 +37,9 @@ parameters:
   - error
   - warning
   - none
+- name: checkoutSubmodules
+  type: boolean
+  default: false
 
 - name: dockerMemory
   type: string
@@ -120,6 +123,7 @@ stages:
       displayName: Checking free disk and ram space
     - checkout: self
       clean: true
+      submodules: ${{ parameters.checkoutSubmodules }}
 
     - powershell: |
         dotnet tool update sign --global --prerelease
