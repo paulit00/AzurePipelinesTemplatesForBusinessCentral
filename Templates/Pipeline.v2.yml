@@ -506,11 +506,14 @@ stages:
           New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
 
           $TestFolders = @(
-            $env:TestFolders |
-            ConvertFrom-Json |
+            $(
+              $env:TestFolders | ConvertFrom-Json
+            ) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
           )
-          $RepositoryAppFolders = @($env:AppFolders | ConvertFrom-Json) + $TestFolders
+          $RepositoryAppFolders = @($(
+            $env:AppFolders | ConvertFrom-Json
+          )) + $TestFolders
           $RepositoryAppIds = @(
             foreach ($AppFolder in $RepositoryAppFolders) {
               ([Guid](Get-Content -LiteralPath (Join-Path $env:BUILD_SOURCESDIRECTORY "$AppFolder\app.json") -Raw | ConvertFrom-Json).id).ToString().ToLowerInvariant()
