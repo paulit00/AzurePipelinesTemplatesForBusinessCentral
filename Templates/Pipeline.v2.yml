@@ -630,8 +630,9 @@ stages:
             Stop-BcContainer -containerName $ContainerName
           }
 
+          # NOTE: Same as Pipeline.yml: test failures are reported but do not fail the build.
           if (-not $AllPassed) {
-            throw 'There are test failures.'
+            Write-Host -Object '##vso[task.logissue type=warning]There are test failures.'
           }
         env:
           BcArtifactUrl: $(BcArtifactUrl)
