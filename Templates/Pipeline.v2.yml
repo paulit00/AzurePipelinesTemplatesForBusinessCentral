@@ -95,6 +95,15 @@ parameters:
 - name: timeoutInMinutes
   type: number
   default: 120
+- name: alRunnerTests
+  type: boolean
+  default: false
+- name: alRunnerVersion
+  type: string
+  default: '3.0.0-alpha.11'
+- name: alRunnerSha256
+  type: string
+  default: 'b34ac0720f61a7c3306fb512476474ee974dbb258e589f5e1645c521d9083839'
 
 stages:
 - stage: Main
@@ -364,6 +373,114 @@ stages:
         LatestDependencyAppPaths: ${{ convertToJson(parameters.latestDependencyAppPaths) }}
       displayName: Compile and sign apps (no container)
 
+    # NOTE: Experimental. AL Runner (community, alpha) runs AL tests without a BC service tier. Never fails the build.
+    - ${{ if and(parameters.alRunnerTests, gt(length(parameters.testFolders), 0)) }}:
+      - powershell: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+          $ToolRoot = Join-Path $env:ProgramData "SofteraBcPipeline\al-runner\$env:AlRunnerVersion"
+          $Exe = Join-Path $ToolRoot 'al-runner.exe'
+          if (-not (Test-Path -LiteralPath $Exe)) {
+            $Archive = "al-runner-$env:AlRunnerVersion-x86_64-pc-windows-msvc.zip"
+            $Url = "https://github.com/aldevtools/BusinessCentral.AL.Runner/releases/download/v$env:AlRunnerVersion/$Archive"
+            $TempArchive = Join-Path $env:AGENT_TEMPDIRECTORY $Archive
+            Write-Host -Object "Downloading $Url"
+            Invoke-WebRequest -Uri $Url -OutFile $TempArchive -UseBasicParsing
+            $ActualHash = (Get-FileHash -LiteralPath $TempArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($ActualHash -ne $env:AlRunnerSha256.ToLowerInvariant()) {
+              throw "Checksum mismatch for ${Archive}: got $ActualHash, expected $env:AlRunnerSha256."
+            }
+            New-Item -ItemType Directory -Path $ToolRoot -Force | Out-Null
+            Expand-Archive -LiteralPath $TempArchive -DestinationPath $ToolRoot -Force
+            Unblock-File -LiteralPath $Exe
+          }
+          & $Exe --version
+
+          $AppFolders = @($(
+            $env:AppFolders | ConvertFrom-Json
+          ))
+          $TestFolders = @(
+            $(
+              $env:TestFolders | ConvertFrom-Json
+            ) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+          )
+          $DependencyFolders = @(
+            $(
+              $env:LatestDependencyAppPaths | ConvertFrom-Json
+            ) |
+            Where-Object { $_ }
+          )
+          if ($env:BcArtifactUrl -notmatch '/(?<Version>\d+(?:\.\d+){3})/(?<Country>[^/?]+)') {
+            throw "Cannot read BC version and country from '$env:BcArtifactUrl'."
+          }
+          $ResultsFile = Join-Path $env:BUILD_SOURCESDIRECTORY 'ALRunnerResults.xml'
+          $CacheDir = Join-Path $env:ProgramData 'SofteraBcPipeline\al-runner-cache'
+
+          $Arguments = @('test') + @(
+            $AppFolders + $TestFolders |
+            ForEach-Object -Process { Join-Path $env:BUILD_SOURCESDIRECTORY $_ }
+          )
+          foreach ($DependencyFolder in $DependencyFolders) {
+            $Arguments += '--dep', $DependencyFolder
+          }
+          $Arguments += @(
+            '--bc-version', $Matches.Version
+            '--country', $Matches.Country
+            '--cache-dir', $CacheDir
+            '--junit', $ResultsFile
+            '--allow-not-run'
+            '--verbose'
+            '--timings'
+            '--top-refusals', '30'
+            '--top-failures', '30'
+          )
+          Write-Host -Object "al-runner $($Arguments -join ' ')"
+
+          $ErrorActionPreference = 'Continue'
+          $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          & $Exe @Arguments
+          $ExitCode = $LASTEXITCODE
+          Write-Host -Object "AL Runner finished in $([int]$Stopwatch.Elapsed.TotalSeconds) seconds with exit code $ExitCode."
+          $Meaning = switch ($ExitCode) {
+            0 { 'all selected tests passed' }
+            1 { 'some tests failed' }
+            2 { 'bad invocation, or the run could not start' }
+            3 { 'apps do not compile under AL Runner, no tests ran' }
+            6 { 'no tests matched' }
+            7 { 'some tests were not run' }
+            8 { 'some tests were not run because the .NET helper was unavailable' }
+            default { 'unknown exit code' }
+          }
+          if ($ExitCode -ne 0) {
+            Write-Host -Object "##vso[task.logissue type=warning]AL Runner exit code ${ExitCode}: $Meaning."
+          }
+          if ($ExitCode -eq 2) {
+            & $Exe test --help
+          }
+          exit 0
+        env:
+          AlRunnerVersion: ${{ parameters.alRunnerVersion }}
+          AlRunnerSha256: ${{ parameters.alRunnerSha256 }}
+          BcArtifactUrl: $(BcArtifactUrl)
+          AppFolders: ${{ convertToJson(parameters.appFolders) }}
+          TestFolders: ${{ convertToJson(parameters.testFolders) }}
+          LatestDependencyAppPaths: ${{ convertToJson(parameters.latestDependencyAppPaths) }}
+        continueOnError: true
+        timeoutInMinutes: 45
+        displayName: Run tests with AL Runner (experimental)
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testResultsFormat: JUnit
+          testResultsFiles: ALRunnerResults.xml
+          searchFolder: $(Build.SourcesDirectory)
+          testRunTitle: AL Runner (experimental)
+          failTaskOnMissingResultsFile: false
+        displayName: Publish AL Runner test results
     - ${{ if and(parameters.runTests, gt(length(parameters.testFolders), 0)) }}:
       - powershell: |
           Set-StrictMode -Version Latest
@@ -655,6 +772,7 @@ stages:
           testResultsFormat: JUnit
           testResultsFiles: TestResults.xml
           searchFolder: $(Build.SourcesDirectory)
+          testRunTitle: BC container
           failTaskOnMissingResultsFile: false
         displayName: Publish test results
     - ${{ if parameters.publishOutput }}:
