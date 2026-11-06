@@ -86,7 +86,7 @@ parameters:
 - name: runTests
   type: boolean
   default: true
-- name: ignoreTestFailures
+- name: failOnTestFailures
   type: boolean
   default: false
 - name: keepWarmContainerRunning
@@ -754,11 +754,10 @@ stages:
           }
 
           if (-not $AllPassed) {
-            if ($env:IgnoreTestFailures -eq 'True') {
-              Write-Host -Object '##vso[task.logissue type=warning]There are test failures (ignoreTestFailures is on, the build continues).'
-            } else {
-              throw 'There are test failures. Set ignoreTestFailures: true to continue the build despite them.'
+            if ($env:FailOnTestFailures -eq 'True') {
+              throw 'There are test failures (failOnTestFailures is on, the build stops).'
             }
+            Write-Host -Object '##vso[task.logissue type=warning]There are test failures. Set failOnTestFailures: true to stop the build on them.'
           }
         env:
           BcArtifactUrl: $(BcArtifactUrl)
@@ -771,7 +770,7 @@ stages:
           BeforeAppsInstallScript: ${{ parameters.beforeAppsInstallScript }}
           KeepWarmContainerRunning: ${{ parameters.keepWarmContainerRunning }}
           MaxWarmContainersPerAgent: ${{ parameters.maxWarmContainersPerAgent }}
-          IgnoreTestFailures: ${{ parameters.ignoreTestFailures }}
+          FailOnTestFailures: ${{ parameters.failOnTestFailures }}
         displayName: Run tests in warm container
       - task: PublishTestResults@2
         condition: succeededOrFailed()
