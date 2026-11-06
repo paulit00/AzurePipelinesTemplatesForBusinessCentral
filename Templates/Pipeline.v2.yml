@@ -86,6 +86,9 @@ parameters:
 - name: runTests
   type: boolean
   default: true
+- name: ignoreTestFailures
+  type: boolean
+  default: false
 - name: keepWarmContainerRunning
   type: boolean
   default: true
@@ -750,9 +753,12 @@ stages:
             Stop-BcContainer -containerName $ContainerName
           }
 
-          # NOTE: Same as Pipeline.yml: test failures are reported but do not fail the build.
           if (-not $AllPassed) {
-            Write-Host -Object '##vso[task.logissue type=warning]There are test failures.'
+            if ($env:IgnoreTestFailures -eq 'True') {
+              Write-Host -Object '##vso[task.logissue type=warning]There are test failures (ignoreTestFailures is on, the build continues).'
+            } else {
+              throw 'There are test failures. Set ignoreTestFailures: true to continue the build despite them.'
+            }
           }
         env:
           BcArtifactUrl: $(BcArtifactUrl)
@@ -765,6 +771,7 @@ stages:
           BeforeAppsInstallScript: ${{ parameters.beforeAppsInstallScript }}
           KeepWarmContainerRunning: ${{ parameters.keepWarmContainerRunning }}
           MaxWarmContainersPerAgent: ${{ parameters.maxWarmContainersPerAgent }}
+          IgnoreTestFailures: ${{ parameters.ignoreTestFailures }}
         displayName: Run tests in warm container
       - task: PublishTestResults@2
         condition: succeededOrFailed()
