@@ -103,10 +103,10 @@ parameters:
   default: false
 - name: alRunnerVersion
   type: string
-  default: '3.0.0-alpha.11'
+  default: '3.0.0-alpha.13'
 - name: alRunnerSha256
   type: string
-  default: 'b34ac0720f61a7c3306fb512476474ee974dbb258e589f5e1645c521d9083839'
+  default: 'c24094cc57a837cefe4ba7a488e0045653462ef29a8136899778fd476cea44d5'
 
 stages:
 - stage: Main
